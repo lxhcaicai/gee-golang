@@ -1,8 +1,10 @@
 package gee
 
 import (
+	"html/template"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -18,8 +20,10 @@ type (
 
 	Engine struct {
 		*RouterGroup
-		router *router
-		groups []*RouterGroup // store all groups
+		router        *router
+		groups        []*RouterGroup     // store all groups
+		htmlTemplates *template.Template // for html render
+		funcMap       template.FuncMap   // for html render
 	}
 )
 
@@ -32,6 +36,7 @@ func (engine *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Reques
 	}
 	c := newContext(writer, request)
 	c.handlers = middlewares
+	c.engine = engine
 	engine.router.handle(c)
 }
 
@@ -77,4 +82,35 @@ func (group *RouterGroup) POST(pattern string, handler HandleFunc) {
 
 func (engine *Engine) Run(addr string) (err error) {
 	return http.ListenAndServe(addr, engine)
+}
+
+// 创建静态处理
+func (group *RouterGroup) createStaticHandler(relativePath string, fs http.FileSystem) HandleFunc {
+	absolutePath := path.Join(group.prefix, relativePath)
+	fileServer := http.StripPrefix(absolutePath, http.FileServer(fs))
+	return func(c *Context) {
+		file := c.Param("filepath")
+		//检查文件是否存在和/或是否有权限访问它
+		if _, err := fs.Open(file); err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		fileServer.ServeHTTP(c.Writer, c.Req)
+	}
+}
+
+// 自定义渲染函数
+func (engine *Engine) SetFuncMap(funcMap template.FuncMap) {
+	engine.funcMap = funcMap
+}
+
+func (engine *Engine) LoadHTMLGlob(pattern string) {
+	engine.htmlTemplates = template.Must(template.New("").Funcs(engine.funcMap).ParseGlob(pattern))
+}
+
+func (group *RouterGroup) Static(relativePath string, root string) {
+	handler := group.createStaticHandler(relativePath, http.Dir(root))
+	uslPattern := path.Join(relativePath, "/*filePath")
+	// Register GET handlers
+	group.GET(uslPattern, handler)
 }
