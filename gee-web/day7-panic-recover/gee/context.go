@@ -21,6 +21,8 @@ type Context struct {
 	// middleware
 	handlers []HandleFunc
 	index    int
+	// engine pointer
+	engine *Engine
 }
 
 func (c *Context) Next() {
@@ -74,10 +76,13 @@ func (c *Context) Query(key string) string {
 	return c.Req.URL.Query().Get(key)
 }
 
-func (c *Context) HTML(code int, html string) {
+// HTML template render
+func (c *Context) HTML(code int, name string, data interface{}) {
 	c.SetHeader("Content-Type", "text/html")
 	c.Status(code)
-	c.Writer.Write([]byte(html))
+	if err := c.engine.htmlTemplates.ExecuteTemplate(c.Writer, name, data); err != nil {
+		c.Fail(500, err.Error())
+	}
 }
 
 func (c *Context) Data(code int, data []byte) {
