@@ -98,3 +98,10 @@ func (c *Context) JSON(code int, obj interface{}) {
 		http.Error(c.Writer, err.Error(), 500)
 	}
 }
+
+// Default use Logger() & Recovery middlewares
+func Default() *Engine {
+	engine := New()
+	engine.Use(Logger(), Recovery())
+	return engine
+}
